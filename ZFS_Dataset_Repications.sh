@@ -3,22 +3,29 @@
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 # #   Script for snapshoting and/or replication a zfs dataset locally or remotely using zfs or rsync depending on the destination         # #
 # #   (needs Unraid 6.12 or above)                                                                                                        # #
-# #   by - SpaceInvaderOne                                                                                                                # # 
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# #   by - SpaceInvaderOne                                                                                                                # #
+# #   some changes by - DaRK AnGeL                                                                                                        # #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 #
 # Main Variables
 #
 ####################
 #
 #Unraid notifications during process (sent to Unraid gui etc)
+
+#Redirecting bash script output (echo) to syslog
+PROG_NAME="ZFS_SnapShot"
+exec 1> >(logger -s -t $PROG_NAME) 2>&1
+####################
+
 notification_type="all"  # set to "all" for both success & failure, to "error"for only failure or "none" for no notices to be sent.
 notify_tune="yes"  # as well as a notifiction, if sucessful it will play the Mario "achievment tune" or failure StarWars imperial march tune on beep speaker!
                    # sometimes good to have an audiable notification!! Set to "no" for silence. (this function your server needs a beep speaker)
 #
 ####################
 # Source for snapshotting and/or replication
-source_pool="source_zfs_pool_name"  #this is the zpool in which your source dataset resides (note the does NOT start with /mnt/)
-source_dataset="dataset_name"   #this is the name of the dataset you want to snapshot and/or replicate
+source_pool="system_cache_ssd"  #this is the zpool in which your source dataset resides (note the does NOT start with /mnt/)
+source_dataset="appdata"   #this is the name of the dataset you want to snapshot and/or replicate
                                 #If using auto snapshots souce pool CAN NOT contain spaces. This is because sanoid config doesnt handle them
 #
 ####################
@@ -48,8 +55,8 @@ replication="zfs"   #this is set to the method for how you want to have the sour
 #
 ##########
 # zfs replication variables. You do NOT need these if replication set to "rsync" or "none"
-destination_pool="dest_zfs_pool_name"  #this is the zpool in which your destination dataset will be created
-parent_destination_dataset="dest_dataset_name" #this is the parent dataset in which a child dataset will be created containing the replicated data (zfs replication)
+destination_pool="disk7"  #this is the zpool in which your destination dataset will be created
+parent_destination_dataset="zfs_backups" #this is the parent dataset in which a child dataset will be created containing the replicated data (zfs replication)
 # For ZFS replication syncoid is used. The below variable sets some options for that.
 # "strict-mirror" Strict mirroring that both mirrors the source and repairs mismatches (uses --force-delete flag).This will delete snapshots in the destination which are not in the source.
 # "basic" Basic replication without any additional flags will not delete snapshots in destination if not in the source
@@ -337,6 +344,7 @@ zfs_replication() {
     case "${syncoid_mode}" in
       "strict-mirror")
         syncoid_flags+=("--force-delete")
+        syncoid_flags+=("--delete-target-snapshots")
         ;;
       "basic")
         # No additional flags other than -r
@@ -475,9 +483,11 @@ rsync -avh --delete $link_dest "${snapshot_mount_point}/" "${rsync_destination}/
 ########################################
 #
 # run the above functions 
+echo "$PROG_NAME is Started..."
 pre_run_checks
 create_sanoid_config
 autosnap
+autoprune
 rsync_replication
 zfs_replication
-autoprune
+echo "All Done"
